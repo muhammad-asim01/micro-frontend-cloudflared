@@ -3,8 +3,7 @@ name: Monorepo Deployment to Cloudflare
 on:
   push:
     branches:
-      - "*"
-      
+      - "**"
   workflow_dispatch:
 
 jobs:
@@ -18,16 +17,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: false
 
       # 2️⃣ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.19.4'
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            adminside/package-lock.json
+            userside/package-lock.json
 
-      # --- PROJECT 1: adminside ---
+      # --- PROJECT 1: adminside (Cloudflare Pages) ---
       - name: Build & Deploy adminside
         id: deploy_adminside
         env:
@@ -36,14 +38,13 @@ jobs:
         run: |
           echo "Processing adminside..."
           cd adminside
-          npm install --legacy-peer-deps
+          npm ci --legacy-peer-deps
           npm run build
-          npx wrangler pages deploy dist --project-name=adminside-external > ../admin_deploy.txt 2>&1
-          cat ../admin_deploy.txt
+          npx wrangler@latest pages deploy out --project-name=adminside-external 2>&1 | tee ../admin_deploy.txt
           URL=$(grep -oE "https://[^ ]+\.pages\.dev" ../admin_deploy.txt | head -n 1)
           echo "url=$URL" >> $GITHUB_OUTPUT
 
-      # --- PROJECT 2: userside ---
+      # --- PROJECT 2: userside (Cloudflare Pages) ---
       - name: Build & Deploy userside
         id: deploy_userside
         env:
@@ -52,12 +53,10 @@ jobs:
         run: |
           echo "Processing userside..."
           cd userside
-          npm install --legacy-peer-deps
+          npm ci --legacy-peer-deps
           npm run build
-          DEPLOY_ENV=$([[ "${GITHUB_REF}" == "refs/heads/main" ]] && echo "production" || echo "staging")
-          npx wrangler deploy --env $DEPLOY_ENV > ../user_deploy.txt 2>&1
-          cat ../user_deploy.txt
-          URL=$(grep -oE "https://[^ ]+\.workers\.dev" ../user_deploy.txt | head -n 1)
+          npx wrangler@latest pages deploy out --project-name=userside-external 2>&1 | tee ../user_deploy.txt
+          URL=$(grep -oE "https://[^ ]+\.pages\.dev" ../user_deploy.txt | head -n 1)
           echo "url=$URL" >> $GITHUB_OUTPUT
 
       # --- SUMMARY REPORT ---
@@ -65,7 +64,8 @@ jobs:
         if: always()
         run: |
           echo "### 🚀 Monorepo Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Project | Type | URL |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
           echo "| **Adminside** | Pages | ${{ steps.deploy_adminside.outputs.url || 'Build Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Userside** | Worker | ${{ steps.deploy_userside.outputs.url || 'Build Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Userside** | Pages | ${{ steps.deploy_userside.outputs.url || 'Build Failed' }} |" >> $GITHUB_STEP_SUMMARY
