@@ -25,6 +25,15 @@ jobs:
         with:
           node-version: "20"
 
+      # 3️⃣ Ensure Cloudflare Pages projects exist
+      - name: Create Pages projects if not exists
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler@latest pages project create adminside-external 2>/dev/null || true
+          npx wrangler@latest pages project create userside-external 2>/dev/null || true
+
       # --- PROJECT 1: adminside (Cloudflare Pages) ---
       - name: Build & Deploy adminside
         id: deploy_adminside
@@ -36,7 +45,7 @@ jobs:
           cd adminside
           npm ci --legacy-peer-deps
           npm run build
-          npx wrangler@latest pages deploy out --project-name=adminside-external 2>&1 | tee ../admin_deploy.txt
+          npx wrangler@latest pages deploy out --project-name=adminside-external --commit-dirty=true 2>&1 | tee ../admin_deploy.txt
           URL=$(grep -oE "https://[^ ]+\.pages\.dev" ../admin_deploy.txt | head -n 1)
           echo "url=$URL" >> $GITHUB_OUTPUT
 
@@ -51,7 +60,7 @@ jobs:
           cd userside
           npm ci --legacy-peer-deps
           npm run build
-          npx wrangler@latest pages deploy out --project-name=userside-external 2>&1 | tee ../user_deploy.txt
+          npx wrangler@latest pages deploy out --project-name=userside-external --commit-dirty=true 2>&1 | tee ../user_deploy.txt
           URL=$(grep -oE "https://[^ ]+\.pages\.dev" ../user_deploy.txt | head -n 1)
           echo "url=$URL" >> $GITHUB_OUTPUT
 
